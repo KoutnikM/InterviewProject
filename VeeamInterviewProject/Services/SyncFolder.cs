@@ -165,7 +165,7 @@ namespace VeeamInterviewProject.Services
         {
             token.ThrowIfCancellationRequested();
 
-            foreach (var file in Directory.GetFiles(targetDirectory))
+            foreach (var file in Directory.EnumerateFiles(targetDirectory))
             {
                 token.ThrowIfCancellationRequested();
 
@@ -190,7 +190,7 @@ namespace VeeamInterviewProject.Services
                 }
             }
 
-            foreach (var dir in Directory.GetDirectories(targetDirectory))
+            foreach (var dir in Directory.EnumerateDirectories(targetDirectory))
             {
                 token.ThrowIfCancellationRequested();
 
