@@ -6,6 +6,6 @@ namespace VeeamInterviewProject.Abstractions
 {
     public interface ICompare
     {
-        bool Compare(string target, string source);
+        bool AreFilesDifferent(string target, string source);
     }
 }

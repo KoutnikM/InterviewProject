@@ -37,6 +37,12 @@ namespace VeeamInterviewProject.Services
         /// <returns></returns>
         public async Task Sync(CancellationToken token)
         {
+            var parralelOptions = new ParallelOptions
+            {
+                CancellationToken = token,
+                MaxDegreeOfParallelism = Environment.ProcessorCount
+            };
+
             while (!token.IsCancellationRequested)
             {
                 try
@@ -47,13 +53,9 @@ namespace VeeamInterviewProject.Services
                         logger.ErrorMessage("Source directory does not exist.");
                         throw new Exception("Source directory does not exist.");
                     }
-                    if (!Directory.Exists(target))
-                    {
-                        Directory.CreateDirectory(target);
-                    }
 
-                    await SyncDirectories(source, target);
-                    Remove(source, target);
+                    await SyncDirectories(source, target, parralelOptions);
+                    Remove(source, target, token);
 
                     logger.InfoMessage($"Next synchronization in {interval} seconds");
                     await Task.Delay(TimeSpan.FromSeconds(interval), token);
@@ -78,7 +80,7 @@ namespace VeeamInterviewProject.Services
         /// <param name="sourceDirectory"></param>
         /// <param name="targetDirectory"></param>
         /// <returns></returns>
-        private async Task SyncDirectories(string sourceDirectory, string targetDirectory)
+        private async Task SyncDirectories(string sourceDirectory, string targetDirectory, ParallelOptions parallelOptions)
         {
             if (!Directory.Exists(targetDirectory))
             {
@@ -98,8 +100,9 @@ namespace VeeamInterviewProject.Services
                 return;
             }
 
-            await Parallel.ForEachAsync(files, async (file, token) =>
+            await Parallel.ForEachAsync(files, parallelOptions, async (file, token) =>
             {
+                token.ThrowIfCancellationRequested();
                 try
                 {
                     string fileName = Path.GetFileName(file);
@@ -111,7 +114,7 @@ namespace VeeamInterviewProject.Services
                             logger.InfoMessage($"Copied file: {file} -> {replicaFile}");
                         }
                     }
-                    else if (compare.Compare(file, replicaFile))
+                    else if (compare.AreFilesDifferent(file, replicaFile))
                     {
                         if (Copy(file, replicaFile, true))
                         {
@@ -129,16 +132,19 @@ namespace VeeamInterviewProject.Services
                 }
             });
 
-            var subDirs = Directory.GetDirectories(sourceDirectory);
+            IEnumerable<string> subDirs;
 
-            await Parallel.ForEachAsync(subDirs, async (dir, token) =>
+            subDirs = Directory.EnumerateDirectories(sourceDirectory);
+
+            await Parallel.ForEachAsync(subDirs, parallelOptions, async (dir, token) =>
             {
+                token.ThrowIfCancellationRequested();
                 try
                 {
-                    var dirName = Path.GetFileName(dir);
-                    var replicaSubDir = Path.Combine(targetDirectory, dirName);
+                    string dirName = Path.GetFileName(dir);
+                    string replicaSubDir = Path.Combine(targetDirectory, dirName);
 
-                    await SyncDirectories(dir, replicaSubDir);
+                    await SyncDirectories(dir, replicaSubDir, parallelOptions);
                 }
                 catch (UnauthorizedAccessException ex)
                 {
@@ -155,12 +161,16 @@ namespace VeeamInterviewProject.Services
         /// </summary>
         /// <param name="sourceDirectory"></param>
         /// <param name="targetDirectory"></param>
-        private void Remove(string sourceDirectory, string targetDirectory)
+        private void Remove(string sourceDirectory, string targetDirectory, CancellationToken token)
         {
+            token.ThrowIfCancellationRequested();
+
             foreach (var file in Directory.GetFiles(targetDirectory))
             {
-                var fileName = Path.GetFileName(file);
-                var sourceFile = Path.Combine(sourceDirectory, fileName);
+                token.ThrowIfCancellationRequested();
+
+                string fileName = Path.GetFileName(file);
+                string sourceFile = Path.Combine(sourceDirectory, fileName);
 
                 if (!File.Exists(sourceFile))
                 {
@@ -182,6 +192,8 @@ namespace VeeamInterviewProject.Services
 
             foreach (var dir in Directory.GetDirectories(targetDirectory))
             {
+                token.ThrowIfCancellationRequested();
+
                 string dirName = Path.GetFileName(dir);
                 string sourceSubDir = Path.Combine(sourceDirectory, dirName);
 
@@ -203,7 +215,7 @@ namespace VeeamInterviewProject.Services
                 }
                 else
                 {
-                    Remove(dir, sourceSubDir);
+                    Remove(sourceSubDir, dir, token);
                 }
             }
         }

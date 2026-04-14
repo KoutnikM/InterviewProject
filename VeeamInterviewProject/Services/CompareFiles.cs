@@ -1,4 +1,5 @@
-﻿using System;
+﻿using NLog.Targets;
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Security.Cryptography;
@@ -21,27 +22,21 @@ namespace VeeamInterviewProject.Services
         /// <param name="source"></param>
         /// <param name="target"></param>
         /// <returns></returns>
-        public bool Compare(string source, string target)
+        public bool AreFilesDifferent(string source, string target)
         {
             var sourceFile = new FileInfo(source);
             var targetFile = new FileInfo(target);
 
-            if (CompareSize(sourceFile.Length, targetFile.Length))
+            if(!IsSameSize(sourceFile, targetFile))
             {
-                logger.InfoMessage($"Comparing size of source: {source} and target: {target}");
+                return true; 
+            }
+            if (!IsSameTime(sourceFile, targetFile))
+            {
                 return true;
+            }
 
-            }
-            else if (CompareTime(sourceFile.LastWriteTime, targetFile.LastWriteTime))
-            {
-                logger.InfoMessage($"Comparing timestap of source: {source} and target: {target}");
-                return true;
-            }
-            else
-            {
-                logger.InfoMessage($"Comparing hash source: {source} and target: {target}");
-                return CompareMD5(source, target);
-            }
+            return CompareMD5(source, target);
         }
         /// <summary>
         /// Computes MD5 hashes of two files and compares them
@@ -49,17 +44,19 @@ namespace VeeamInterviewProject.Services
         /// <param name="fileSource"></param>
         /// <param name="fileTarget"></param>
         /// <returns></returns>
-        private static bool CompareMD5(string fileSource, string fileTarget)
+        private bool CompareMD5(string source, string target)
         {
+            logger.InfoMessage($"Comparing hash source: {source} and target: {target}");
+
             using (var md5 = MD5.Create())
             {
-                using (var stream1 = File.OpenRead(fileSource))
-                using (var stream2 = File.OpenRead(fileTarget))
+                using (var stream1 = File.OpenRead(source))
+                using (var stream2 = File.OpenRead(target))
                 {
                     var hash1 = md5.ComputeHash(stream1);
                     var hash2 = md5.ComputeHash(stream2);
 
-                    return StructuralComparisons.StructuralEqualityComparer.Equals(hash1, hash2);
+                    return StructuralComparisons.StructuralEqualityComparer.Equals(hash1, hash2); 
                 }
             }
         }
@@ -69,9 +66,10 @@ namespace VeeamInterviewProject.Services
         /// <param name="timeSource"></param>
         /// <param name="timeTarget"></param>
         /// <returns></returns>
-        private static bool CompareTime(DateTime timeSource, DateTime timeTarget)
+        private bool IsSameTime(FileInfo source, FileInfo target)
         {
-            return timeSource != timeTarget;
+            logger.InfoMessage($"Comparing timestap of source: {source.Name} and target: {target.Name}");
+            return source.LastWriteTime == target.LastWriteTime;
         }
         /// <summary>
         /// Compares size of files
@@ -79,9 +77,10 @@ namespace VeeamInterviewProject.Services
         /// <param name="sizeSource"></param>
         /// <param name="sizeTarget"></param>
         /// <returns></returns>
-        private static bool CompareSize(long sizeSource, long sizeTarget)
+        private bool IsSameSize(FileInfo source, FileInfo target)
         {
-            return sizeSource != sizeTarget;
+            logger.InfoMessage($"Comparing size of source: {source.Name} and target: {target.Name}");
+            return source.Length == target.Length;
         }
     }
 }
